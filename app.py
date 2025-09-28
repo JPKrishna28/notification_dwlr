@@ -61,7 +61,7 @@ def send_alert(table: str, row: dict):
     if table in ["water_levels", "water_levels2"]:
         recipient_phone = "+91 8096191416"
     else:  # water_levels3, water_levels4
-        recipient_phone = "+91 76010 24711"
+        recipient_phone = "+91 7601024711"
     
     message = f"""
     🚨 Anomaly Detected!
