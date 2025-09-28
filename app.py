@@ -14,7 +14,8 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY","eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey
 TWILIO_SID = os.getenv("TWILIO_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE = os.getenv("TWILIO_PHONE")  # Twilio phone number
-OWNER_PHONE = os.getenv("OWNER_PHONE")    # Owner phone number (or map table -> phone)
+PHONE_NUMBER_1 = "number1"  # Replace with actual phone number for water_levels and water_levels2
+PHONE_NUMBER_2 = "number2"  # Replace with actual phone number for water_levels3 and water_levels4
 
 # Connect to Supabase
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -56,6 +57,12 @@ def send_alert(table: str, row: dict):
         print(f"⏭️  Alert already sent for {alert_id}")
         return
     
+    # Determine which phone number to use based on table
+    if table in ["water_levels", "water_levels2"]:
+        recipient_phone = PHONE_NUMBER_1
+    else:  # water_levels3, water_levels4
+        recipient_phone = PHONE_NUMBER_2
+    
     message = f"""
     🚨 Anomaly Detected!
     Table: {table}
@@ -66,12 +73,12 @@ def send_alert(table: str, row: dict):
     twilio_client.messages.create(
         body=message,
         from_=TWILIO_PHONE,
-        to=OWNER_PHONE
+        to=recipient_phone
     )
     
     # Mark this alert as sent
     sent_alerts.add(alert_id)
-    print(f"✅ Alert sent via Twilio for {alert_id}")
+    print(f"✅ Alert sent via Twilio for {alert_id} to {recipient_phone}")
 
 # ========== POLLING LOOP ==========
 def poll_tables():
