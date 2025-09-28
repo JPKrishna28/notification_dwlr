@@ -1,0 +1,3 @@
+supabase
+twilio
+python-dotenv
