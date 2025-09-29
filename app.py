@@ -36,7 +36,7 @@ def is_anomalous(row: dict) -> bool:
     battery = float(row.get("battery_level") or 0)
 
     # Example anomaly rules (customize!)
-    if water_level < 0 or water_level > 500:   # unrealistic values
+    if water_level < 1 or water_level > 500:   # unrealistic values
         return True
     if pressure < 0 or pressure > 200000:
         return True
