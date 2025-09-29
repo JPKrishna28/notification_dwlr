@@ -35,22 +35,35 @@ def is_anomalous(row: dict) -> bool:
     temperature = float(row.get("temperature") or 0)
     battery = float(row.get("battery_level") or 0)
 
+    print(f"🔍 Debug: Checking anomalies - WL:{water_level}, P:{pressure}, T:{temperature}, B:{battery}")
+
     # Example anomaly rules (customize!)
     if water_level < 1 or water_level > 500:   # unrealistic values
+        print(f"⚠️  Water level anomaly detected: {water_level}")
         return True
     if pressure < 0 or pressure > 200000:
+        print(f"⚠️  Pressure anomaly detected: {pressure}")
         return True
     if temperature < -10 or temperature > 70:  # sensor failure range
+        print(f"⚠️  Temperature anomaly detected: {temperature}")
         return True
     if battery < 1:  # battery critically low
+        print(f"⚠️  Battery anomaly detected: {battery}")
         return True
+    
+    print("✅ No anomalies detected")
     return False
 
 # ========== ALERTING ==========
 def send_alert(table: str, row: dict):
     """Send SMS via Twilio."""
-    # Create unique identifier for this alert
-    alert_id = f"{table}_{row.get('station_id')}_{row.get('id')}"
+    # Create unique identifier for this alert - handle missing station_id
+    station_id = row.get('station_id', 'unknown')
+    row_id = row.get('id', row.get('idx', 'unknown'))
+    alert_id = f"{table}_{station_id}_{row_id}"
+    
+    print(f"🔍 Debug: Checking alert for {alert_id}")
+    print(f"🔍 Debug: Row data - WL:{row.get('water_level')}, P:{row.get('pressure')}, T:{row.get('temperature')}, B:{row.get('battery_level')}")
     
     # Check if we've already sent an alert for this specific row
     if alert_id in sent_alerts:
@@ -63,22 +76,29 @@ def send_alert(table: str, row: dict):
     else:  # water_levels3, water_levels4
         recipient_phone = "+917601024711"
     
+    print(f"📨 Sending alert for {alert_id} to {recipient_phone}")
+    
     message = f"""
     🚨 Anomaly Detected!
     Table: {table}
-    Station ID: {row.get('station_id')}
+    Station ID: {station_id}
+    Row ID: {row_id}
     Time: {row.get('timestamp')}
     Values -> WL: {row.get('water_level')} | P: {row.get('pressure')} | T: {row.get('temperature')} | B: {row.get('battery_level')}
     """
-    twilio_client.messages.create(
-        body=message,
-        from_=TWILIO_PHONE,
-        to=recipient_phone
-    )
     
-    # Mark this alert as sent
-    sent_alerts.add(alert_id)
-    print(f"✅ Alert sent via Twilio for {alert_id} to {recipient_phone}")
+    try:
+        twilio_client.messages.create(
+            body=message,
+            from_=TWILIO_PHONE,
+            to=recipient_phone
+        )
+        
+        # Mark this alert as sent
+        sent_alerts.add(alert_id)
+        print(f"✅ Alert sent via Twilio for {alert_id} to {recipient_phone}")
+    except Exception as e:
+        print(f"❌ Failed to send alert for {alert_id}: {str(e)}")
 
 # ========== POLLING LOOP ==========
 def poll_tables():
@@ -86,14 +106,21 @@ def poll_tables():
     global last_poll_time
     last_poll_time = datetime.now()
     
+    print(f"🔄 Starting poll at {last_poll_time}")
     tables = ["water_levels", "water_levels2", "water_levels3", "water_levels4"]
     for table in tables:
         try:
+            print(f"📋 Checking table: {table}")
             response = supabase.table(table).select("*").order("id", desc=True).limit(1).execute()
             if response.data:
                 latest_row = response.data[0]
+                print(f"📊 Latest row from {table}: {latest_row}")
                 if is_anomalous(latest_row):
                     send_alert(table, latest_row)
+                else:
+                    print(f"✅ No anomalies in {table}")
+            else:
+                print(f"📭 No data found in {table}")
         except Exception as e:
             print(f"❌ Error polling {table}: {str(e)}")
 
