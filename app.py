@@ -83,17 +83,94 @@ def send_alert(table: str, row: dict):
 # ========== POLLING LOOP ==========
 def poll_tables():
     """Poll Supabase tables for new rows and check anomalies."""
+    global last_poll_time
+    last_poll_time = datetime.now()
+    
     tables = ["water_levels", "water_levels2", "water_levels3", "water_levels4"]
     for table in tables:
-        response = supabase.table(table).select("*").order("id", desc=True).limit(1).execute()
-        if response.data:
-            latest_row = response.data[0]
-            if is_anomalous(latest_row):
-                send_alert(table, latest_row)
+        try:
+            response = supabase.table(table).select("*").order("id", desc=True).limit(1).execute()
+            if response.data:
+                latest_row = response.data[0]
+                if is_anomalous(latest_row):
+                    send_alert(table, latest_row)
+        except Exception as e:
+            print(f"❌ Error polling {table}: {str(e)}")
 
-if __name__ == "__main__":
+# ========== FLASK WEB SERVICE ==========
+from flask import Flask, jsonify
+from datetime import datetime
+
+app = Flask(__name__)
+service_start_time = datetime.now()
+monitoring_active = True
+last_poll_time = None
+
+@app.route('/')
+def home():
+    uptime = datetime.now() - service_start_time
+    return jsonify({
+        'service': 'Water Level Anomaly Detection',
+        'status': 'running',
+        'monitoring_active': monitoring_active,
+        'uptime_seconds': int(uptime.total_seconds()),
+        'alerts_sent_count': len(sent_alerts),
+        'last_poll': last_poll_time.isoformat() if last_poll_time else 'Not started',
+        'tables_monitored': ['water_levels', 'water_levels2', 'water_levels3', 'water_levels4']
+    })
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
+
+@app.route('/alerts')
+def alerts():
+    return jsonify({
+        'total_alerts_sent': len(sent_alerts),
+        'alert_ids': list(sent_alerts),
+        'monitoring_active': monitoring_active
+    })
+
+@app.route('/status')
+def status():
+    uptime = datetime.now() - service_start_time
+    return jsonify({
+        'service_status': 'active' if monitoring_active else 'paused',
+        'uptime_hours': round(uptime.total_seconds() / 3600, 2),
+        'last_poll': last_poll_time.isoformat() if last_poll_time else 'Never',
+        'alerts_sent': len(sent_alerts)
+    })
+
+@app.route('/trigger-check')
+def trigger_check():
+    """Manually trigger a polling check."""
+    try:
+        poll_tables()
+        return jsonify({
+            'message': 'Manual check completed',
+            'timestamp': datetime.now().isoformat(),
+            'alerts_sent_count': len(sent_alerts)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def start_monitoring():
+    """Start the monitoring loop."""
     import time
     print("🔄 Starting anomaly detector service...")
     while True:
-        poll_tables()
-        time.sleep(100)  # Poll every 10 seconds
+        if monitoring_active:
+            poll_tables()
+        time.sleep(100)  # Poll every 100 seconds
+
+if __name__ == "__main__":
+    import threading
+    
+    # Start monitoring in a separate thread
+    monitor_thread = threading.Thread(target=start_monitoring, daemon=True)
+    monitor_thread.start()
+    
+    # Start Flask web server
+    port = int(os.environ.get('PORT', 10000))
+    print(f"🚀 Starting Flask web service on port {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
